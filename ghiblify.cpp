@@ -91,6 +91,11 @@ int bound(int n, int low, int high)
     return min(max(n, low), high);
 }
 
+float fbound(float n, float low, float high) 
+{
+    return min(max(n, low), high);
+}
+
 png_bytepp filter(png_bytepp img, vector<vector<double>> filter_m, const double factor) 
 {
     // This is slow but yolo (only dealing with small convolution matrix anyways)
@@ -265,12 +270,138 @@ void rgb2hsv(png_bytep px, float* hsv)
 
 void hsv2rgb(float* hsv, png_bytep px)
 {
-    
+    float ss = hsv[1]/100.0f;
+    float vv = hsv[2]/100.0f;
+
+    if (hsv[0] >= 360.0f)
+        hsv[0] = 0.0f;
+    hsv[0] /= 60.0f;
+    long i(hsv[0]);
+    float ff = hsv[0]-i;
+
+    float p = vv*(1.0f-ss);
+    float q = vv*(1.0f-(ss*ff));
+    float t = vv*(1.0f-(ss*(1.0f-ff)));
+
+    switch(i) 
+    {
+        case 0:
+            px[0] = vv*255;
+            px[1] = t*255;
+            px[2] = p*255;
+            break;
+        case 1:
+            px[0] = q*255;
+            px[1] = vv*255;
+            px[2] = p*255;
+            break;
+        case 2:
+            px[0] = p*255;
+            px[1] = vv*255;
+            px[2] = t*255;
+            break;
+        case 3:
+            px[0] = p*255;
+            px[1] = q*255;
+            px[2] = vv*255;
+            break;
+        case 4:
+            px[0] = t*255;
+            px[1] = p*255;
+            px[2] = vv*255;
+            break;
+        default:
+            px[0] = vv*255;
+            px[1] = p*255;
+            px[2] = q*255;
+            break;
+    }
 }
 
-png_bytepp huesat(png_bytepp img)
+png_bytepp hsvcorrect_noise(png_bytepp img)
 {
+    /* Convert to hsv */
+    float** img_hsv = (float**)malloc(sizeof(float)*image_width*image_height*3);
+    for(int i = 0; i < image_height; i++) {
+        img_hsv[i] = (float*)malloc(image_width*3*sizeof(float));
+    }
 
+    float avg_hsv[3] = {0.0f, 0.0f, 0.0f};
+    for(int y = 0; y < image_height; y++) {
+        vector<float*> row;
+        for(int x = 0; x < image_width; x++) 
+        {
+            float* hsv = &img_hsv[y][x*3];
+            rgb2hsv(&img[y][x*bpp], hsv);
+
+            avg_hsv[0] += hsv[0];
+            avg_hsv[1] += hsv[1];
+            avg_hsv[2] += hsv[2];
+            if (x == 0 && y ==0)
+                cout << hsv[0] << "," << hsv[1] << "," << hsv[2] << endl;
+        }
+    }
+    float px_cnt = image_height*image_width;
+    avg_hsv[0] /= px_cnt;
+    avg_hsv[1] /= px_cnt;
+    avg_hsv[2] /= px_cnt;
+    cout << avg_hsv[0] << "," << avg_hsv[1] << "," << avg_hsv[2] << endl;
+
+    /* Determine changes */
+    float hue_ratio = 1.0f, sat_ratio = 1.0f, val_ratio = 1.0f;
+
+    if (avg_hsv[0] < 340 && avg_hsv[0] > 60 && avg_hsv[2] < 76) {
+        if (avg_hsv[1] < 90) {
+            sat_ratio = 1.0f-(90.0f-avg_hsv[1])/360.0f;
+            val_ratio = 1.0f-(80.0f-avg_hsv[1])/640.0f;
+        }
+        if (avg_hsv[0] < 216) {
+            hue_ratio = 1.0f+(216.0f-avg_hsv[0])/720.0f;
+        } else {
+            hue_ratio = 1.0f-(avg_hsv[0]-216.0f)/960.0f;
+        }
+    } else {
+        if (avg_hsv[1] < 80) {
+            sat_ratio = 1.0f+(100.0f-avg_hsv[1])/500.0f;
+        }
+        if (avg_hsv[0] < 32) {
+            hue_ratio = 1.0f-(avg_hsv[0])/96.0f;
+        } else if (avg_hsv[0] > 254) {
+            hue_ratio = 1.0f+(360.0f-avg_hsv[0])/1080.0f;
+        }
+    }
+    cout << avg_hsv[0] << "," << avg_hsv[1] << "," << avg_hsv[2] << endl;
+    cout << hue_ratio << "," << sat_ratio << "," << val_ratio << endl;
+    cout << (&img_hsv[100][300])[0] << "," << (&img_hsv[100][300])[1] << "," << (&img_hsv[100][300])[2] << endl;
+
+    /* Apply changes and noise */
+    int hue_noise = 5;
+    int sat_noise = 4;
+    int val_noise = 9;
+
+    png_bytepp out = (png_bytepp)malloc(sizeof(png_bytep)*image_height);
+    for(int i = 0; i < image_height; i++) {
+        out[i] = (png_bytep)malloc(image_width*bpp);
+    }
+
+    for(int y = 0; y < image_height; y++) {
+        for(int x = 0; x < image_width; x++) 
+        {
+            float* hsvpx = (&img_hsv[y][x*3]);
+            hsvpx[0] = fbound(hsvpx[0]*hue_ratio+(rand()%(hue_noise*2)-hue_noise), 0.0f, 360.0f);
+            hsvpx[1] = fbound(hsvpx[1]*sat_ratio+(rand()%(sat_noise*2)-sat_noise), 0.0f, 100.0f);
+            hsvpx[2] = fbound(hsvpx[2]*val_ratio+(rand()%(val_noise*2)-val_noise), 0.0f, 100.0f);
+            /* HSV noise */
+            
+
+            png_bytep outpx = &out[y][x*bpp];
+            hsv2rgb(hsvpx, outpx);
+        }
+    }
+
+    free(img_hsv);
+
+    return out;
 }
 
 png_bytepp exposure(png_bytepp img, const double exposure, const double black)
@@ -310,9 +441,10 @@ png_bytepp ghiblify(png_bytepp img)
     const double black_level = 0.05;
 
     out = gaussian_b(img, blur_factor1);
-    out = oilify(img, oil_radius, 64, 2);
+    out = oilify(out, oil_radius, 64, 2);
     out = gaussian_b(out, blur_factor2);
     out = exposure(out, exposure_level, black_level);
+    out = hsvcorrect_noise(out);
 
     return out;
 }
@@ -321,9 +453,12 @@ int main(int argc, char *argv[])
 {
     float hsv[3];
 
-    unsigned char b[4] = {124u,168u,71u,255u}; 
-    rgb2hsv((png_bytep)b, hsv);
-    cout << hsv[0] << "," <<  hsv[1] << "," << hsv[2] << endl;
+    // unsigned char b[4] = {124u,168u,71u,255u}; 
+    // cout << (int)b[0] << "," <<  (int)b[1] << "," << (int)b[2] << endl;
+    // rgb2hsv((png_bytep)b, hsv);
+    // cout << hsv[0] << "," <<  hsv[1] << "," << hsv[2] << endl;
+    // hsv2rgb(hsv, (png_bytep)b);
+    // cout << (int)b[0] << "," <<  (int)b[1] << "," << (int)b[2] << endl;
     read_png(argv[1]);
 
     string out;

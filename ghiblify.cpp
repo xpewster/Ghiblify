@@ -316,6 +316,7 @@ void hsv2rgb(float* hsv, png_bytep px)
             px[2] = q*255;
             break;
     }
+    px[3] = 255;
 }
 
 png_bytepp hsvcorrect_noise(png_bytepp img)
@@ -337,47 +338,41 @@ png_bytepp hsvcorrect_noise(png_bytepp img)
             avg_hsv[0] += hsv[0];
             avg_hsv[1] += hsv[1];
             avg_hsv[2] += hsv[2];
-            if (x == 0 && y ==0)
-                cout << hsv[0] << "," << hsv[1] << "," << hsv[2] << endl;
         }
     }
     float px_cnt = image_height*image_width;
     avg_hsv[0] /= px_cnt;
     avg_hsv[1] /= px_cnt;
     avg_hsv[2] /= px_cnt;
-    cout << avg_hsv[0] << "," << avg_hsv[1] << "," << avg_hsv[2] << endl;
 
     /* Determine changes */
     float hue_ratio = 1.0f, sat_ratio = 1.0f, val_ratio = 1.0f;
 
-    if (avg_hsv[0] < 340 && avg_hsv[0] > 60 && avg_hsv[2] < 76) {
-        if (avg_hsv[1] < 90) {
-            sat_ratio = 1.0f-(90.0f-avg_hsv[1])/360.0f;
-            val_ratio = 1.0f-(80.0f-avg_hsv[1])/640.0f;
-        }
-        if (avg_hsv[0] < 216) {
-            hue_ratio = 1.0f+(216.0f-avg_hsv[0])/720.0f;
-        } else {
-            hue_ratio = 1.0f-(avg_hsv[0]-216.0f)/960.0f;
-        }
-    } else {
-        if (avg_hsv[1] < 80) {
-            sat_ratio = 1.0f+(100.0f-avg_hsv[1])/500.0f;
-        }
-        if (avg_hsv[0] < 32) {
-            hue_ratio = 1.0f-(avg_hsv[0])/96.0f;
-        } else if (avg_hsv[0] > 254) {
-            hue_ratio = 1.0f+(360.0f-avg_hsv[0])/1080.0f;
-        }
-    }
-    cout << avg_hsv[0] << "," << avg_hsv[1] << "," << avg_hsv[2] << endl;
-    cout << hue_ratio << "," << sat_ratio << "," << val_ratio << endl;
-    cout << (&img_hsv[100][300])[0] << "," << (&img_hsv[100][300])[1] << "," << (&img_hsv[100][300])[2] << endl;
+    // if (avg_hsv[0] < 340 && avg_hsv[0] > 60 && avg_hsv[2] < 76) {
+    //     if (avg_hsv[1] < 90) {
+    //         sat_ratio = 1.0f-(90.0f-avg_hsv[1])/360.0f;
+    //         val_ratio = 1.0f-(80.0f-avg_hsv[1])/640.0f;
+    //     }
+    //     if (avg_hsv[0] < 216) {
+    //         hue_ratio = 1.0f+(360.0f-avg_hsv[0])/600.0f;
+    //     } else {
+    //         hue_ratio = 1.0f-(avg_hsv[0]-216.0f)/960.0f;
+    //     }
+    // } else {
+    //     if (avg_hsv[1] < 80) {
+    //         sat_ratio = 1.0f+(100.0f-avg_hsv[1])/500.0f;
+    //     }
+    //     if (avg_hsv[0] < 32) {
+    //         hue_ratio = 1.0f-(avg_hsv[0])/96.0f;
+    //     } else if (avg_hsv[0] > 254) {
+    //         hue_ratio = 1.0f+(360.0f-avg_hsv[0])/1080.0f;
+    //     }
+    // }
 
     /* Apply changes and noise */
     int hue_noise = 5;
     int sat_noise = 4;
-    int val_noise = 9;
+    int val_noise = 3;
 
     png_bytepp out = (png_bytepp)malloc(sizeof(png_bytep)*image_height);
     for(int i = 0; i < image_height; i++) {
@@ -388,12 +383,11 @@ png_bytepp hsvcorrect_noise(png_bytepp img)
         for(int x = 0; x < image_width; x++) 
         {
             float* hsvpx = (&img_hsv[y][x*3]);
-            hsvpx[0] = fbound(hsvpx[0]*hue_ratio+(rand()%(hue_noise*2)-hue_noise), 0.0f, 360.0f);
-            hsvpx[1] = fbound(hsvpx[1]*sat_ratio+(rand()%(sat_noise*2)-sat_noise), 0.0f, 100.0f);
-            hsvpx[2] = fbound(hsvpx[2]*val_ratio+(rand()%(val_noise*2)-val_noise), 0.0f, 100.0f);
+            hsvpx[0] = fbound(hsvpx[0]*hue_ratio+(float)(rand()%(hue_noise*2)-hue_noise), 0.0f, 360.0f);
+            hsvpx[1] = fbound(hsvpx[1]*sat_ratio+(float)(rand()%(sat_noise*2)-sat_noise), 0.0f, 100.0f);
+            hsvpx[2] = fbound(hsvpx[2]*val_ratio+(float)(rand()%(val_noise*2)-val_noise), 0.0f, 100.0f);
             /* HSV noise */
             
-
             png_bytep outpx = &out[y][x*bpp];
             hsv2rgb(hsvpx, outpx);
         }
